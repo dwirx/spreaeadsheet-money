@@ -172,6 +172,13 @@
         </div>
       </div>
 
+      <div class="form-group" id="wallet-group-utang" style="display: none;">
+        <label for="walletUtang">Ambil Dana Dari Wallet</label>
+        <select id="walletUtang" name="walletUtang">
+          <option value="" disabled selected>Pilih Wallet Sumber...</option>
+        </select>
+      </div>
+
       <div class="form-group">
         <label for="pihak">Nama Pihak Terkait</label>
         <input type="text" id="pihak" name="pihak" placeholder="Contoh: John Doe, Warung Sebelah" required>
@@ -233,31 +240,45 @@
     // Add event listener to amount input
     document.getElementById('jumlah').addEventListener('keyup', formatNumber);
 
-    // Show wallet selection when "Piutang" is chosen
+    // Show wallet selection based on transaction type
     document.querySelectorAll('input[name="jenis"]').forEach(radio => {
       radio.addEventListener('change', function() {
-        const walletGroup = document.getElementById('wallet-group');
+        const walletGroupPiutang = document.getElementById('wallet-group');
+        const walletGroupUtang = document.getElementById('wallet-group-utang');
+        
         if (this.value === 'Piutang') {
-          walletGroup.style.display = 'block';
+          walletGroupPiutang.style.display = 'block';
           document.getElementById('wallet').required = true;
-        } else {
-          walletGroup.style.display = 'none';
+          walletGroupUtang.style.display = 'none';
+          document.getElementById('walletUtang').required = false;
+        } else if (this.value === 'Utang') {
+          walletGroupPiutang.style.display = 'none';
           document.getElementById('wallet').required = false;
+          walletGroupUtang.style.display = 'block';
+          document.getElementById('walletUtang').required = true;
         }
       });
     });
 
-    // Load wallets into the select dropdown
+    // Load wallets into the select dropdowns
     document.addEventListener('DOMContentLoaded', function() {
         google.script.run.withSuccessHandler(function(wallets) {
-            const walletSelect = document.getElementById('wallet');
-            walletSelect.innerHTML = '<option value="" disabled selected>Pilih Wallet Tujuan...</option>';
+            const walletSelectPiutang = document.getElementById('wallet');
+            const walletSelectUtang = document.getElementById('walletUtang');
+
+            const defaultOptionPiutang = '<option value="" disabled selected>Pilih Wallet Tujuan...</option>';
+            const defaultOptionUtang = '<option value="" disabled selected>Pilih Wallet Sumber...</option>';
+
+            walletSelectPiutang.innerHTML = defaultOptionPiutang;
+            walletSelectUtang.innerHTML = defaultOptionUtang;
+
             if (wallets && wallets.length > 0) {
                 wallets.forEach(wallet => {
                     const option = document.createElement('option');
                     option.value = wallet;
                     option.textContent = wallet;
-                    walletSelect.appendChild(option);
+                    walletSelectPiutang.appendChild(option.cloneNode(true));
+                    walletSelectUtang.appendChild(option);
                 });
             }
         }).getWallets();
@@ -275,7 +296,8 @@
         tanggalCatat: this.elements['tanggalCatat'].value,
         tanggalJatuhTempo: this.elements['tanggalJatuhTempo'].value,
         catatan: this.elements['catatan'].value,
-        wallet: this.elements['wallet'].value
+        wallet: this.elements['wallet'].value,
+        walletUtang: this.elements['walletUtang'].value
       };
 
       // Show loading

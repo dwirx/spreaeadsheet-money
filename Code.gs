@@ -774,10 +774,10 @@ function addUtangPiutang(data) {
     sheet.getRange(newRow, 1, 1, rowData.length).setValues([rowData]);
     sheet.sort(5, false); // Sort by Tanggal Catat descending
 
-    // If it's a Piutang and a wallet is selected, add a transaction
+    const transaksiSheet = ss.getSheetByName('Transaksi');
+
+    // If it's a Piutang and a wallet is selected, add an income transaction
     if (data.jenis === 'Piutang' && data.wallet) {
-      const transaksiSheet = ss.getSheetByName('Transaksi');
-      const transaksiRow = transaksiSheet.getLastRow() + 1;
       const pemasukanData = [
         new Date(data.tanggalCatat),
         'Pemasukan',
@@ -791,10 +791,35 @@ function addUtangPiutang(data) {
         'Otomatis dari pencatatan piutang',
         Session.getActiveUser().getEmail()
       ];
-      transaksiSheet.getRange(transaksiRow, 1, 1, pemasukanData.length).setValues([pemasukanData]);
+      transaksiSheet.appendRow(pemasukanData);
+    }
+
+    // If it's an Utang and a source wallet is selected, add an expense transaction
+    if (data.jenis === 'Utang' && data.walletUtang) {
+        const pengeluaranData = [
+            new Date(data.tanggalCatat),
+            'Pengeluaran',
+            'Utang', // Or a more specific category
+            'Dana untuk utang ke ' + data.pihak,
+            parseFloat(cleanJumlah),
+            'Lunas',
+            'Transfer',
+            data.walletUtang,
+            'utang',
+            'Otomatis dari pencatatan utang',
+            Session.getActiveUser().getEmail()
+        ];
+        transaksiSheet.appendRow(pengeluaranData);
+    }
+    
+    // Sort transactions sheet after potential additions and flush
+    if (transaksiSheet.getLastRow() > 1) {
       const dataRange = transaksiSheet.getRange(2, 1, transaksiSheet.getLastRow() - 1, transaksiSheet.getLastColumn());
       dataRange.sort({column: 1, ascending: false});
     }
+    
+    updateDashboard();
+    SpreadsheetApp.flush(); // Force immediate update
 
     return { success: true, message: 'Data utang/piutang berhasil ditambahkan!' };
   } catch (error) {
@@ -832,8 +857,9 @@ function addTransaction(data) {
     const dataRange = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn());
     dataRange.sort({column: 1, ascending: false});
     
-    // Update dashboard
+    // Update dashboard and force flush
     updateDashboard();
+    SpreadsheetApp.flush();
     
     return {success: true, message: 'Transaksi berhasil ditambahkan!'};
   } catch (error) {
@@ -977,7 +1003,7 @@ function updateCharts(dashboardSheet, transaksiSheet) {
   dashboardSheet.insertChart(incomeExpenseChart);
 
   // Create Donut chart for 50/30/20
-  const analysisRange = dashboardSheet.getRange('E29:E31').createFilter().getRange();
+  const analysisRange = dashboardSheet.getRange('E29:E31');
   const analysisValuesRange = dashboardSheet.getRange('H29:H31');
   const donutChart = dashboardSheet.newChart()
     .setChartType(Charts.ChartType.PIE)
@@ -1152,70 +1178,86 @@ function showTransferDialog() {
 // ===== PROCESS TRANSFER =====
 function processTransfer(data) {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Transaksi');
-    const lastRow = sheet.getLastRow();
-    const cleanJumlah = data.jumlah.replace(/\./g, '');
-    const cleanBiayaAdmin = data.biayaAdmin ? data.biayaAdmin.replace(/\./g, '') : '0';
-    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('Transaksi');
+    const cleanJumlah = parseFloat(data.jumlah.replace(/\./g, ''));
+    const cleanBiayaAdmin = data.biayaAdmin ? parseFloat(data.biayaAdmin.replace(/\./g, '')) : 0;
+    const user = Session.getActiveUser().getEmail();
+    const tanggal = new Date(data.tanggal);
+
+    if (data.walletAsal === data.walletTujuan) {
+      throw new Error('Wallet asal dan tujuan tidak boleh sama.');
+    }
+    if (isNaN(cleanJumlah) || cleanJumlah <= 0) {
+      throw new Error('Jumlah transfer tidak valid.');
+    }
+
     const transactions = [];
 
-    // Add transfer out transaction
+    // 1. Transfer Keluar
     const transferOut = [
-      new Date(data.tanggal),
+      tanggal,
       'Transfer Keluar',
       'Transfer',
       'Transfer ke ' + data.walletTujuan,
-      parseFloat(cleanJumlah),
+      cleanJumlah,
       'Lunas',
       'Transfer',
       data.walletAsal,
       'transfer',
       data.catatan || '',
-      Session.getActiveUser().getEmail()
+      user
     ];
     transactions.push(transferOut);
-    
-    // Add transfer in transaction
+
+    // 2. Transfer Masuk
     const transferIn = [
-      new Date(data.tanggal),
+      tanggal,
       'Transfer Masuk',
       'Transfer',
       'Transfer dari ' + data.walletAsal,
-      parseFloat(cleanJumlah),
+      cleanJumlah,
       'Lunas',
       'Transfer',
       data.walletTujuan,
       'transfer',
       data.catatan || '',
-      Session.getActiveUser().getEmail()
+      user
     ];
     transactions.push(transferIn);
 
-    // Add admin fee transaction if exists
-    if (parseFloat(cleanBiayaAdmin) > 0) {
+    // 3. Biaya Admin (jika ada)
+    if (cleanBiayaAdmin > 0) {
       const adminFee = [
-        new Date(data.tanggal),
+        tanggal,
         'Pengeluaran',
-        'Biaya & Pajak', // Make sure this category exists
-        'Biaya admin transfer',
-        parseFloat(cleanBiayaAdmin),
+        'Biaya Admin',
+        'Biaya admin transfer ke ' + data.walletTujuan,
+        cleanBiayaAdmin,
         'Lunas',
         'Transfer',
-        data.walletAsal,
-        'biaya-admin',
-        data.catatan || '',
-        Session.getActiveUser().getEmail()
+        data.walletAsal, // Biaya admin diambil dari wallet asal
+        'biaya_admin',
+        'Otomatis dari transfer',
+        user
       ];
       transactions.push(adminFee);
     }
-    
-    sheet.getRange(lastRow + 1, 1, transactions.length, transactions[0].length).setValues(transactions);
-    
-    // Update dashboard
+
+    // Write all transactions to the sheet
+    sheet.getRange(sheet.getLastRow() + 1, 1, transactions.length, transactions[0].length).setValues(transactions);
+
+    // Sort the entire sheet by date
+    const dataRange = sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn());
+    dataRange.sort({column: 1, ascending: false});
+
+    // Update dashboard and force flush
     updateDashboard();
-    
+    SpreadsheetApp.flush();
+
     return {success: true, message: 'Transfer berhasil diproses!'};
   } catch (error) {
+    Logger.log(error);
     return {success: false, message: 'Error: ' + error.toString()};
   }
 }
