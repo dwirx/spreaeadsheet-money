@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f5f5f5;
+      padding: 20px;
+    }
+
+    .container {
+      background-color: white;
+      border-radius: 10px;
+      padding: 25px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    h2 {
+      color: #333;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+      color: #555;
+      font-weight: 500;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      font-size: 14px;
+      transition: border-color 0.3s;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: #2196F3;
+    }
+
+    .transfer-icon {
+      text-align: center;
+      font-size: 24px;
+      margin: 10px 0;
+      color: #2196F3;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    button {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .btn-primary {
+      background-color: #2196F3;
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background-color: #1976D2;
+    }
+
+    .btn-secondary {
+      background-color: #757575;
+      color: white;
+    }
+
+    .btn-secondary:hover {
+      background-color: #616161;
+    }
+
+    #loading {
+      display: none;
+      text-align: center;
+      color: #666;
+      margin-top: 10px;
+    }
+
+    .amount-input {
+      font-size: 18px;
+      font-weight: bold;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>💳 Transfer Antar Wallet</h2>
+
+    <form id="transferForm">
+      <div class="form-group">
+        <label for="tanggal">Tanggal Transfer</label>
+        <input type="date" id="tanggal" name="tanggal" required>
+      </div>
+
+      <div class="form-group">
+        <label for="walletAsal">Dari Wallet</label>
+        <select id="walletAsal" name="walletAsal" required>
+          <option value="">-- Loading --</option>
+        </select>
+      </div>
+
+      <div class="transfer-icon">⬇️</div>
+
+      <div class="form-group">
+        <label for="walletTujuan">Ke Wallet</label>
+        <select id="walletTujuan" name="walletTujuan" required>
+          <option value="">-- Loading --</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="jumlah">Jumlah Transfer (Rp)</label>
+        <input type="text" id="jumlah" name="jumlah"
+               placeholder="100.000" required class="amount-input">
+      </div>
+
+      <div class="form-group">
+        <label for="catatan">Catatan (opsional)</label>
+        <textarea id="catatan" name="catatan" rows="2"
+                  placeholder="Contoh: Transfer untuk tabungan"></textarea>
+      </div>
+
+      <div class="button-group">
+        <button type="submit" class="btn-primary">✅ Proses Transfer</button>
+        <button type="button" class="btn-secondary" onclick="google.script.host.close()">❌ Batal</button>
+      </div>
+    </form>
+
+    <div id="loading">
+      <p>⏳ Memproses transfer...</p>
+    </div>
+  </div>
+
+  <script>
+    // Function to format number with dots
+    function formatNumber(e) {
+      let value = e.target.value.replace(/\D/g, '');
+     
+    google.script.run.withSuccessHandler(function(wallets) {
+      const walletAsalSelect = document.getElementById('walletAsal');
+      const walletTujuanSelect = document.getElementById('walletTujuan');
+
+      const options = '<option value="">-- Pilih Wallet --</option>' +
+                     wallets.map(w => `<option value="${w}">${w}</option>`).join('');
+
+      walletAsalSelect.innerHTML = options;
+      walletTujuanSelect.innerHTML = options;
+    }).getWallets();
+
+    // Handle form submission
+    document.getElementById('transferForm').addEventListener('submit', function(e) {
+      e.preventDefault();
+
+      const walletAsal = document.getElementById('walletAsal').value;
+      const walletTujuan = document.getElementById('walletTujuan').value;
+
+      if (walletAsal === walletTujuan) {
+        alert('Wallet asal dan tujuan tidak boleh sama!');
+        return;
+      }
+
+      const formData = {
+        tanggal: document.getElementById('tanggal').value,
+        walletAsal: walletAsal,
+        walletTujuan: walletTujuan,
+        jumlah: document.getElementById('jumlah').value,
+        catatan: document.getElementById('catatan').value
+      };
+
+      // Show loading
+      document.getElementById('transferForm').style.display = 'none';
+      document.getElementById('loading').style.display = 'block';
+
+      // Submit to server
+      google.script.run
+        .withSuccessHandler(function(result) {
+          if (result.success) {
+            google.script.host.close();
+          } else {
+            alert('Error: ' + result.message);
+            document.getElementById('transferForm').style.display = 'block';
+            document.getElementById('loading').style.display = 'none';
+          }
+        })
+        .withFailureHandler(function(error) {
+          alert('Error: ' + error);
+          document.getElementById('transferForm').style.display = 'block';
+          document.getElementById('loading').style.display = 'none';
+        })
+        .processTransfer(formData);
+    });
+  </script>
+</body>
+</html>
