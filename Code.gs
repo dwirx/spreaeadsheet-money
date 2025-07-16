@@ -7,7 +7,8 @@ function onOpen() {
     .addItem('🚀 Setup Awal', 'setupComplete')
     .addItem('➕ Transaksi Baru', 'showTransactionDialog')
     .addItem('💳 Transfer Antar Wallet', 'showTransferDialog')
-    .addItem('💸 Catat Utang/Piutang', 'showUtangPiutangDialog') // New Menu Item
+    .addItem('💸 Catat Utang/Piutang', 'showUtangPiutangDialog')
+    .addItem('🎯 Atur Anggaran', 'showBudgetDialog') // New Menu Item
     .addSeparator()
     .addSubMenu(ui.createMenu('📊 Laporan')
       .addItem('📅 Laporan Mingguan', 'generateWeeklyReport')
@@ -48,7 +49,8 @@ function setupComplete() {
   setupTransaksi(ss.insertSheet('Transaksi'));
   setupWallets(ss.insertSheet('Wallets'));
   setupKategori(ss.insertSheet('Kategori'));
-  setupUtangPiutang(ss.insertSheet('UtangPiutang')); // New Sheet Setup
+  setupUtangPiutang(ss.insertSheet('UtangPiutang'));
+  setupBudget(ss.insertSheet('Budget')); // New Sheet Setup
   setupLaporan(ss.insertSheet('Laporan'));
   setupPengaturan(ss.insertSheet('Pengaturan'));
   
@@ -144,16 +146,95 @@ function setupDashboard(sheet) {
   // Conditional formatting untuk selisih
   const selisihRule = SpreadsheetApp.newConditionalFormatRule()
     .whenNumberGreaterThan(0)
-    .setBackground('#C8E6C9')
+    .setBackground('#C8E6C9') // Green
     .setRanges([sheet.getRange('G7')])
     .build();
     
   const selisihNegativeRule = SpreadsheetApp.newConditionalFormatRule()
     .whenNumberLessThan(0)
-    .setBackground('#FFCDD2')
+    .setBackground('#FFCDD2') // Red
     .setRanges([sheet.getRange('G7')])
     .build();
   
+  // === BUDGET SUMMARY (BULAN INI) ===
+  sheet.getRange('A37').setValue('📊 RINGKASAN BUDGET BULANAN');
+  sheet.getRange('A37').setFontSize(14).setFontWeight('bold').setBackground('#E3F2FD');
+  sheet.getRange('A37:D37').merge();
+  const budgetHeaders = ['Total Anggaran', 'Total Pengeluaran', 'Sisa', 'Penggunaan'];
+  sheet.getRange(38, 1, 1, 4).setValues([budgetHeaders]);
+  sheet.getRange(38, 1, 1, 4).setFontWeight('bold').setBackground('#BBDEFB');
+  sheet.getRange('A39').setFormula('=SUM(Budget!B:B)');
+  sheet.getRange('B39').setFormula('=SUM(Budget!C:C)');
+  sheet.getRange('C39').setFormula('=A39-B39');
+  sheet.getRange('D39').setFormula('=IFERROR(B39/A39, 0)');
+  sheet.getRange('A39:C39').setNumberFormat('"Rp "#,##0');
+  sheet.getRange('D39').setNumberFormat('0%');
+
+  const budgetSisaRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenNumberGreaterThan(0)
+    .setBackground('#C8E6C9')
+    .setRanges([sheet.getRange('C39')])
+    .build();
+  const budgetSisaNegativeRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenNumberLessThan(0)
+    .setBackground('#FFCDD2')
+    .setRanges([sheet.getRange('C39')])
+    .build();
+
+  // === ANALISIS KESEHATAN FINANSIAL (50/30/20) ===
+  sheet.getRange('E27').setValue('❤️ ANALISIS KESEHATAN FINANSIAL (50/30/20)');
+  sheet.getRange('E27').setFontSize(14).setFontWeight('bold').setBackground('#FCE4EC');
+  sheet.getRange('E27:I27').merge();
+
+  const analysisHeaders = [['Tipe', 'Alokasi Ideal', 'Alokasi Aktual', 'Jumlah', 'Status']];
+  sheet.getRange(28, 5, 1, 5).setValues(analysisHeaders); // E28:I28
+  sheet.getRange('E28:I28').setFontWeight('bold').setBackground('#F8BBD0');
+
+  const analysisData = [
+    ['Kebutuhan (Needs)', '50%'],
+    ['Keinginan (Wants)', '30%'],
+    ['Tabungan/Investasi', '20%']
+  ];
+  sheet.getRange(29, 5, 3, 2).setValues(analysisData); // E29:F31
+
+  // Formulas for 50/30/20 analysis
+  const totalIncomeFormula = 'G5'; // Total Pemasukan Bulan Ini
+  sheet.getRange('G29').setFormula(`=H29/${totalIncomeFormula}`); // Aktual % Kebutuhan
+  sheet.getRange('H29').setFormula('=SUM(SUMIFS(Transaksi!E:E, Transaksi!C:C, FILTER(Kategori!D:D, Kategori!F:F="Kebutuhan"), Transaksi!A:A, ">="&EOMONTH(TODAY(),-1)+1, Transaksi!A:A, "<="&EOMONTH(TODAY(),0)))');
+  sheet.getRange('I29').setFormula('=IF(G29<=F29, "✅ Bagus", "⚠️ Evaluasi")');
+
+  sheet.getRange('G30').setFormula(`=H30/${totalIncomeFormula}`); // Aktual % Keinginan
+  sheet.getRange('H30').setFormula('=SUM(SUMIFS(Transaksi!E:E, Transaksi!C:C, FILTER(Kategori!D:D, Kategori!F:F="Keinginan"), Transaksi!A:A, ">="&EOMONTH(TODAY(),-1)+1, Transaksi!A:A, "<="&EOMONTH(TODAY(),0)))');
+  sheet.getRange('I30').setFormula('=IF(G30<=F30, "✅ Bagus", "⚠️ Evaluasi")');
+
+  sheet.getRange('G31').setFormula(`=H31/${totalIncomeFormula}`); // Aktual % Tabungan
+  sheet.getRange('H31').setFormula(`=SUM(SUMIFS(Transaksi!E:E, Transaksi!C:C, FILTER(Kategori!D:D, Kategori!F:F="Tabungan/Investasi"), Transaksi!A:A, ">="&EOMONTH(TODAY(),-1)+1, Transaksi!A:A, "<="&EOMONTH(TODAY(),0))) + SUMIFS(UtangPiutang!D:D, UtangPiutang!A:A, "Piutang", UtangPiutang!G:G, "Lunas", UtangPiutang!E:E, ">="&EOMONTH(TODAY(),-1)+1)`);
+  sheet.getRange('I31').setFormula('=IF(G31>=F31, "✅ Bagus", "⚠️ Tingkatkan")');
+
+  // Formatting
+  sheet.getRange('G29:G31').setNumberFormat('0%');
+  sheet.getRange('H29:H31').setNumberFormat('"Rp "#,##0');
+  sheet.getRange('E29:I31').setHorizontalAlignment('center');
+
+  // Conditional formatting for Status
+  const statusBagusRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenTextContains('✅')
+    .setBackground('#C8E6C9')
+    .setRanges([sheet.getRange('I29:I31')])
+    .build();
+  const statusEvaluasiRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenTextContains('⚠️')
+    .setBackground('#FFEBEE')
+    .setRanges([sheet.getRange('I29:I31')])
+    .build();
+
+  // Rekomendasi Section
+  sheet.getRange('E33').setValue('💡 REKOMENDASI UNTUK ANDA:');
+  sheet.getRange('E33').setFontWeight('bold');
+  sheet.getRange('E34').setFormula('=IF(I29="⚠️ Evaluasi", "Pengeluaran Kebutuhan Anda melebihi 50% dari pendapatan. Coba tinjau kembali pos-pos seperti \'Makanan\' atau \'Tagihan\' untuk efisiensi.", IF(I30="⚠️ Evaluasi", "Pengeluaran Keinginan Anda melebihi 30%. Pertimbangkan untuk mengurangi frekuensi \'Hiburan\' atau \'Belanja\' bulan depan.", IF(I31="⚠️ Tingkatkan", "Alokasi Tabungan Anda di bawah 20%. Coba sisihkan sebagian pendapatan di awal bulan atau cari sumber pemasukan tambahan.", "🏆 Selamat! Alokasi keuangan Anda sudah sangat baik. Pertahankan!")))');
+  sheet.getRange('E34:I35').merge().setWrap(true).setVerticalAlignment('top').setFontStyle('italic');
+
+
   // === TOP KATEGORI ===
   sheet.getRange('A14').setValue('🏆 TOP 5 PENGELUARAN (BULAN INI)');
   sheet.getRange('A14').setFontSize(14).setFontWeight('bold').setBackground('#FFF3E0');
@@ -226,9 +307,10 @@ function setupDashboard(sheet) {
   sheet.setColumnWidths(6, 1, 120);
   sheet.setColumnWidths(7, 1, 100);
   sheet.setColumnWidths(8, 1, 100);
+  sheet.setColumnWidths(9, 1, 100); // New column for 50/30/20
   
   // Apply conditional formatting rules
-  sheet.setConditionalFormatRules([selisihRule, selisihNegativeRule]);
+  sheet.setConditionalFormatRules([selisihRule, selisihNegativeRule, budgetSisaRule, budgetSisaNegativeRule, statusBagusRule, statusEvaluasiRule]);
   
   // Freeze header
   sheet.setFrozenRows(4);
@@ -369,7 +451,7 @@ function setupKategori(sheet) {
   
   sheet.getRange('A1').setValue('🏷️ KATEGORI TRANSAKSI');
   sheet.getRange('A1').setFontSize(16).setFontWeight('bold');
-  sheet.getRange('A1:D1').merge();
+  sheet.getRange('A1:F1').merge(); // Extend merge area
   
   // Kategori Pemasukan
   sheet.getRange('A3').setValue('💰 KATEGORI PEMASUKAN');
@@ -390,33 +472,93 @@ function setupKategori(sheet) {
   // Kategori Pengeluaran
   sheet.getRange('D3').setValue('💸 KATEGORI PENGELUARAN');
   sheet.getRange('D3').setFontWeight('bold').setBackground('#FFCDD2');
-  sheet.getRange('D3:E3').merge();
+  sheet.getRange('D3:F3').merge(); // Extend merge area for new header
   
+  const pengeluaranHeaders = ['Kategori', 'Deskripsi', 'Tipe (50/30/20)'];
+  sheet.getRange(4, 4, 1, 3).setValues([pengeluaranHeaders]).setFontWeight('bold');
+
   const pengeluaranKategori = [
-    ['Makanan', 'Makan & minum'],
-    ['Transportasi', 'Bensin, parkir, toll'],
-    ['Belanja', 'Kebutuhan sehari-hari'],
-    ['Tagihan', 'Listrik, air, internet'],
-    ['Kesehatan', 'Obat & perawatan'],
-    ['Hiburan', 'Entertainment'],
-    ['Pendidikan', 'Kursus & buku'],
-    ['Fashion', 'Pakaian & aksesoris'],
-    ['Gadget', 'Elektronik'],
-    ['Sosial', 'Hadiah & donasi'],
-    ['Investasi', 'Tabungan & investasi'],
-    ['Darurat', 'Pengeluaran darurat'],
-    ['Rumah', 'Perawatan rumah'],
-    ['Lainnya', 'Pengeluaran lainnya']
+    ['Makanan', 'Makan & minum', 'Kebutuhan'],
+    ['Transportasi', 'Bensin, parkir, toll', 'Kebutuhan'],
+    ['Belanja', 'Kebutuhan sehari-hari', 'Kebutuhan'],
+    ['Tagihan', 'Listrik, air, internet', 'Kebutuhan'],
+    ['Kesehatan', 'Obat & perawatan', 'Kebutuhan'],
+    ['Hiburan', 'Entertainment', 'Keinginan'],
+    ['Pendidikan', 'Kursus & buku', 'Keinginan'],
+    ['Fashion', 'Pakaian & aksesoris', 'Keinginan'],
+    ['Gadget', 'Elektronik', 'Keinginan'],
+    ['Sosial', 'Hadiah & donasi', 'Keinginan'],
+    ['Investasi', 'Tabungan & investasi', 'Tabungan/Investasi'],
+    ['Darurat', 'Pengeluaran darurat', 'Kebutuhan'],
+    ['Rumah', 'Perawatan rumah', 'Kebutuhan'],
+    ['Lainnya', 'Pengeluaran lainnya', 'Keinginan']
   ];
   
-  sheet.getRange(4, 4, pengeluaranKategori.length, 2).setValues(pengeluaranKategori);
+  sheet.getRange(5, 4, pengeluaranKategori.length, 3).setValues(pengeluaranKategori);
   
+  // Data validation for Tipe
+  const tipeValidation = SpreadsheetApp.newDataValidation()
+    .requireValueInList(['Kebutuhan', 'Keinginan', 'Tabungan/Investasi'], true)
+    .setAllowInvalid(false)
+    .setHelpText('Pilih salah satu tipe: Kebutuhan (Needs), Keinginan (Wants), atau Tabungan/Investasi (Savings).')
+    .build();
+  sheet.getRange('F5:F').setDataValidation(tipeValidation);
+
   // Format
   sheet.setColumnWidth(1, 120);
   sheet.setColumnWidth(2, 200);
   sheet.setColumnWidth(3, 20);
   sheet.setColumnWidth(4, 120);
   sheet.setColumnWidth(5, 200);
+  sheet.setColumnWidth(6, 150); // Width for new Tipe column
+}
+
+// ===== BUDGET SHEET SETUP =====
+function setupBudget(sheet) {
+  sheet.clear();
+  sheet.setName('Budget');
+
+  sheet.getRange('A1').setValue('🎯 PERENCANAAN ANGGARAN');
+  sheet.getRange('A1').setFontSize(16).setFontWeight('bold');
+  sheet.getRange('A1:E1').merge();
+
+  sheet.getRange('A2').setValue('Atur alokasi dana bulanan Anda di sini. Data "Aktual" akan terisi otomatis dari sheet Transaksi.');
+  sheet.getRange('A2:E2').merge().setFontStyle('italic');
+
+  const headers = ['Kategori', 'Anggaran Bulanan', 'Pengeluaran Aktual', 'Sisa Anggaran', 'Penggunaan (%)'];
+  sheet.getRange(4, 1, 1, headers.length).setValues([headers]);
+  sheet.getRange(4, 1, 1, headers.length).setFontWeight('bold').setBackground('#E0E0E0');
+
+  // Get expense categories
+  const kategoriSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Kategori');
+  const pengeluaranKategori = kategoriSheet.getRange('D5:D' + kategoriSheet.getLastRow()).getValues().flat().filter(String);
+
+  // Populate categories and formulas
+  pengeluaranKategori.forEach((kategori, index) => {
+    const row = 5 + index;
+    sheet.getRange(row, 1).setValue(kategori);
+    sheet.getRange(row, 2).setValue(0); // Default budget
+    sheet.getRange(row, 3).setFormula(`=SUMIFS(Transaksi!E:E, Transaksi!C:C, A${row}, Transaksi!B:B, "Pengeluaran", Transaksi!A:A, ">="&EOMONTH(TODAY(),-1)+1, Transaksi!A:A, "<="&EOMONTH(TODAY(),0))`);
+    sheet.getRange(row, 4).setFormula(`=B${row}-C${row}`);
+    sheet.getRange(row, 5).setFormula(`=IFERROR(C${row}/B${row}, 0)`);
+  });
+
+  // Formatting
+  sheet.getRange('B:D').setNumberFormat('"Rp "#,##0');
+  sheet.getRange('E:E').setNumberFormat('0.00%');
+  sheet.setColumnWidths(1, 1, 150);
+  sheet.setColumnWidths(2, 4, 130);
+
+  // Conditional formatting for usage percentage
+  const usageRule = SpreadsheetApp.newConditionalFormatRule()
+    .setGradientMaxpoint('#FFCDD2') // Red for high usage
+    .setGradientMidpointWithValue('#FFF9C4', SpreadsheetApp.InterpolationType.PERCENT, '75')
+    .setGradientMinpoint('#C8E6C9') // Green for low usage
+    .setRanges([sheet.getRange('E5:E')])
+    .build();
+  
+  sheet.setConditionalFormatRules([usageRule]);
+  sheet.setFrozenRows(4);
 }
 
 // ===== UTANG/PIUTANG SHEET SETUP =====
@@ -538,11 +680,61 @@ function initializeDefaultData() {
   
   // Create named ranges for kategori
   const pemasukanRange = kategoriSheet.getRange('A4:A9');
-  const pengeluaranRange = kategoriSheet.getRange('D4:D17');
+  const pengeluaranRange = kategoriSheet.getRange('D5:D' + kategoriSheet.getLastRow());
   
   ss.setNamedRange('KategoriPemasukan', pemasukanRange);
   ss.setNamedRange('KategoriPengeluaran', pengeluaranRange);
 }
+
+// ===== BUDGET DIALOG =====
+function showBudgetDialog() {
+  const html = HtmlService.createHtmlOutputFromFile('BudgetForm')
+    .setWidth(650)
+    .setHeight(500);
+  SpreadsheetApp.getUi().showModalDialog(html, '🎯 Atur Anggaran Bulanan');
+}
+
+// ===== GET BUDGET DATA (FOR FORM) =====
+function getBudgetData() {
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Budget');
+    const dataRange = sheet.getRange('A5:B' + sheet.getLastRow());
+    const values = dataRange.getValues();
+    
+    return values.map(row => ({
+      kategori: row[0],
+      anggaran: row[1]
+    })).filter(item => item.kategori);
+  } catch (e) {
+    return []; // Return empty array on error
+  }
+}
+
+// ===== UPDATE BUDGET =====
+function updateBudget(budgetData) {
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Budget');
+    const categories = sheet.getRange('A5:A' + sheet.getLastRow()).getValues().flat();
+    
+    const newBudgets = categories.map(category => {
+      if (budgetData.hasOwnProperty(category)) {
+        return [parseFloat(budgetData[category])];
+      }
+      return [0]; // Default to 0 if not found
+    });
+
+    sheet.getRange('B5:B' + (4 + newBudgets.length)).setValues(newBudgets);
+    
+    // Update dashboard to reflect changes
+    updateDashboard();
+
+    return { success: true, message: 'Anggaran berhasil diperbarui!' };
+  } catch (error) {
+    Logger.log(error);
+    return { success: false, message: 'Error: ' + error.toString() };
+  }
+}
+
 
 // ===== TRANSACTION DIALOG =====
 function showTransactionDialog() {
@@ -639,8 +831,8 @@ function getCategories() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getSheetByName('Kategori');
   
-  const pemasukan = sheet.getRange('A4:A9').getValues().flat().filter(val => val);
-  const pengeluaran = sheet.getRange('D4:D17').getValues().flat().filter(val => val);
+  const pemasukan = sheet.getRange('A4:A' + sheet.getLastRow()).getValues().flat().filter(val => val);
+  const pengeluaran = sheet.getRange('D5:D' + sheet.getLastRow()).getValues().flat().filter(val => val);
   
   return {
     pemasukan: pemasukan,
@@ -750,17 +942,34 @@ function updateCharts(dashboardSheet, transaksiSheet) {
 
   // Create column chart for monthly income vs expense
   const summaryRange = dashboardSheet.getRange('F5:G6');
-  const a1Notation = summaryRange.getA1Notation();
   const incomeExpenseChart = dashboardSheet.newChart()
     .setChartType(Charts.ChartType.COLUMN)
     .addRange(summaryRange)
-    .setPosition(28, 6, 0, 0)
+    .setPosition(15, 9, 0, 0) // Repositioned
     .setOption('title', 'Pemasukan vs Pengeluaran Bulan Ini')
     .setOption('width', 450)
     .setOption('height', 300)
     .build();
   
   dashboardSheet.insertChart(incomeExpenseChart);
+
+  // Create Donut chart for 50/30/20
+  const analysisRange = dashboardSheet.getRange('E29:E31').createFilter().getRange();
+  const analysisValuesRange = dashboardSheet.getRange('H29:H31');
+  const donutChart = dashboardSheet.newChart()
+    .setChartType(Charts.ChartType.PIE)
+    .addRange(analysisRange)
+    .addRange(analysisValuesRange)
+    .setMergeStrategy(Charts.ChartMergeStrategy.MERGE_COLUMNS)
+    .setPosition(28, 9, 0, 0) // Repositioned
+    .setOption('title', 'Alokasi Dana (50/30/20)')
+    .setOption('width', 450)
+    .setOption('height', 300)
+    .setOption('pieHole', 0.4)
+    .setOption('colors', ['#4CAF50', '#FFC107', '#2196F3'])
+    .build();
+
+  dashboardSheet.insertChart(donutChart);
 }
 
 // ===== GENERATE REPORTS =====
@@ -922,8 +1131,11 @@ function processTransfer(data) {
   try {
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Transaksi');
     const lastRow = sheet.getLastRow();
-    const cleanJumlah = data.jumlah.replace(/\./g, ''); // Remove dots
+    const cleanJumlah = data.jumlah.replace(/\./g, '');
+    const cleanBiayaAdmin = data.biayaAdmin ? data.biayaAdmin.replace(/\./g, '') : '0';
     
+    const transactions = [];
+
     // Add transfer out transaction
     const transferOut = [
       new Date(data.tanggal),
@@ -938,6 +1150,7 @@ function processTransfer(data) {
       data.catatan || '',
       Session.getActiveUser().getEmail()
     ];
+    transactions.push(transferOut);
     
     // Add transfer in transaction
     const transferIn = [
@@ -953,8 +1166,27 @@ function processTransfer(data) {
       data.catatan || '',
       Session.getActiveUser().getEmail()
     ];
+    transactions.push(transferIn);
+
+    // Add admin fee transaction if exists
+    if (parseFloat(cleanBiayaAdmin) > 0) {
+      const adminFee = [
+        new Date(data.tanggal),
+        'Pengeluaran',
+        'Biaya & Pajak', // Make sure this category exists
+        'Biaya admin transfer',
+        parseFloat(cleanBiayaAdmin),
+        'Lunas',
+        'Transfer',
+        data.walletAsal,
+        'biaya-admin',
+        data.catatan || '',
+        Session.getActiveUser().getEmail()
+      ];
+      transactions.push(adminFee);
+    }
     
-    sheet.getRange(lastRow + 1, 1, 2, transferOut.length).setValues([transferOut, transferIn]);
+    sheet.getRange(lastRow + 1, 1, transactions.length, transactions[0].length).setValues(transactions);
     
     // Update dashboard
     updateDashboard();
