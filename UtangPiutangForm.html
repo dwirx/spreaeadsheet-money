@@ -132,6 +132,11 @@
       </div>
 
       <div class="form-group">
+        <label for="tanggalCatat">Tanggal Pencatatan</label>
+        <input type="date" id="tanggalCatat" name="tanggalCatat" required>
+      </div>
+
+      <div class="form-group">
         <label for="tanggalJatuhTempo">Tanggal Jatuh Tempo (opsional)</label>
         <input type="date" id="tanggalJatuhTempo" name="tanggalJatuhTempo">
       </div>
@@ -153,6 +158,9 @@
   </div>
 
   <script>
+    // Set default recording date
+    document.getElementById('tanggalCatat').valueAsDate = new Date();
+
     // Function to format number with dots
     function formatNumber(e) {
       let value = e.target.value.replace(/\D/g, '');
@@ -170,6 +178,7 @@
         pihak: this.elements['pihak'].value,
         deskripsi: this.elements['deskripsi'].value,
         jumlah: this.elements['jumlah'].value.replace(/\./g, ''), // Remove dots
+        tanggalCatat: this.elements['tanggalCatat'].value,
         tanggalJatuhTempo: this.elements['tanggalJatuhTempo'].value,
         catatan: this.elements['catatan'].value
       };

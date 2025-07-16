@@ -172,7 +172,29 @@ function setupDashboard(sheet) {
   sheet.getRange('F15:H25').merge();
   sheet.getRange('F15').setValue('Grafik akan muncul setelah update dashboard');
   sheet.getRange('F15').setHorizontalAlignment('center').setVerticalAlignment('middle');
+
+  // === RINGKASAN UTANG & PIUTANG ===
+  sheet.getRange('F11').setValue('📊 RINGKASAN UTANG & PIUTANG');
+  sheet.getRange('F11').setFontSize(12).setFontWeight('bold').setBackground('#FFFDE7');
+  sheet.getRange('F11:H11').merge();
+  const utangHeaders = [
+    ['Total Utang Saya:', '=SUMIFS(UtangPiutang!D:D, UtangPiutang!A:A, "Utang", UtangPiutang!G:G, "Belum Lunas")'],
+    ['Total Piutang (Uang Saya di Lain):', '=SUMIFS(UtangPiutang!D:D, UtangPiutang!A:A, "Piutang", UtangPiutang!G:G, "Belum Lunas")']
+  ];
+  sheet.getRange('F12:G13').setValues(utangHeaders);
+  sheet.getRange('G12:G13').setNumberFormat('"Rp "#,##0');
   
+  // === JATUH TEMPO TERDEKAT ===
+  sheet.getRange('A29').setValue('🔔 JATUH TEMPO TERDEKAT (UTANG/PIUTANG)');
+  sheet.getRange('A29').setFontSize(14).setFontWeight('bold').setBackground('#FFEBEE');
+  sheet.getRange('A29:D29').merge();
+  const jatuhTempoHeaders = ['Pihak', 'Deskripsi', 'Jumlah', 'Jatuh Tempo'];
+  sheet.getRange(30, 1, 1, 4).setValues([jatuhTempoHeaders]);
+  sheet.getRange(30, 1, 1, 4).setFontWeight('bold').setBackground('#FFCDD2');
+  sheet.getRange('A31:D35').setFormula('=IFERROR(QUERY(UtangPiutang!B:F, "SELECT B, C, D, F WHERE G = \'Belum Lunas\' AND F IS NOT NULL ORDER BY F ASC LIMIT 5"), "")');
+  sheet.getRange('C31:C35').setNumberFormat('"Rp "#,##0');
+  sheet.getRange('D31:D35').setNumberFormat('dd mmmm yyyy');
+
   // === TRANSAKSI TERAKHIR ===
   sheet.getRange('A22').setValue('🕐 5 TRANSAKSI TERAKHIR');
   sheet.getRange('A22').setFontSize(14).setFontWeight('bold').setBackground('#E1F5FE');
@@ -445,9 +467,17 @@ function setupUtangPiutang(sheet) {
     .setRanges([sheet.getRange('A4:H')])
     .build();
 
-  sheet.setConditionalFormatRules([utangRule, piutangRule, lunasRule]);
+  const jatuhTempoRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenFormulaSatisfied('=AND($F4 < TODAY(), $G4 = "Belum Lunas", NOT(ISBLANK($F4)))')
+    .setBackground('#F44336') // Red
+    .setFontColor('white')
+    .setRanges([sheet.getRange('A4:H')])
+    .build();
+
+  sheet.setConditionalFormatRules([utangRule, piutangRule, lunasRule, jatuhTempoRule]);
   sheet.setFrozenRows(3);
 }
+
 
 // ===== LAPORAN SHEET SETUP =====
 function setupLaporan(sheet) {
@@ -542,7 +572,7 @@ function addUtangPiutang(data) {
       data.pihak,
       data.deskripsi,
       parseFloat(cleanJumlah),
-      new Date(), // Tanggal Catat
+      data.tanggalCatat ? new Date(data.tanggalCatat) : new Date(), // Use provided date or today
       data.tanggalJatuhTempo ? new Date(data.tanggalJatuhTempo) : null,
       'Belum Lunas',
       data.catatan || ''
@@ -557,6 +587,7 @@ function addUtangPiutang(data) {
     return { success: false, message: 'Error: ' + error.toString() };
   }
 }
+
 
 // ===== ADD TRANSACTION FUNCTION =====
 function addTransaction(data) {
@@ -593,6 +624,14 @@ function addTransaction(data) {
   } catch (error) {
     return {success: false, message: 'Error: ' + error.toString()};
   }
+}
+
+// ===== GET INITIAL DATA (FOR FORMS) =====
+function getInitialData() {
+  return {
+    wallets: getWallets(),
+    categories: getCategories()
+  };
 }
 
 // ===== GET CATEGORIES FUNCTION =====
@@ -702,12 +741,26 @@ function updateCharts(dashboardSheet, transaksiSheet) {
     .addRange(dashboardSheet.getRange('A6:B10'))
     .setPosition(15, 6, 0, 0)
     .setOption('title', 'Distribusi Saldo per Wallet')
-    .setOption('width', 300)
-    .setOption('height', 250)
+    .setOption('width', 450)
+    .setOption('height', 300)
     .setOption('pieHole', 0.4)
     .build();
     
   dashboardSheet.insertChart(walletChart);
+
+  // Create column chart for monthly income vs expense
+  const summaryRange = dashboardSheet.getRange('F5:G6');
+  const a1Notation = summaryRange.getA1Notation();
+  const incomeExpenseChart = dashboardSheet.newChart()
+    .setChartType(Charts.ChartType.COLUMN)
+    .addRange(summaryRange)
+    .setPosition(28, 6, 0, 0)
+    .setOption('title', 'Pemasukan vs Pengeluaran Bulan Ini')
+    .setOption('width', 450)
+    .setOption('height', 300)
+    .build();
+  
+  dashboardSheet.insertChart(incomeExpenseChart);
 }
 
 // ===== GENERATE REPORTS =====
