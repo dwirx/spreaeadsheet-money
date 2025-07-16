@@ -755,7 +755,8 @@ function showUtangPiutangDialog() {
 // ===== ADD UTANG/PIUTANG FUNCTION =====
 function addUtangPiutang(data) {
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('UtangPiutang');
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName('UtangPiutang');
     const newRow = sheet.getLastRow() + 1;
     const cleanJumlah = data.jumlah.replace(/\./g, ''); // Remove dots
 
@@ -772,6 +773,28 @@ function addUtangPiutang(data) {
 
     sheet.getRange(newRow, 1, 1, rowData.length).setValues([rowData]);
     sheet.sort(5, false); // Sort by Tanggal Catat descending
+
+    // If it's a Piutang and a wallet is selected, add a transaction
+    if (data.jenis === 'Piutang' && data.wallet) {
+      const transaksiSheet = ss.getSheetByName('Transaksi');
+      const transaksiRow = transaksiSheet.getLastRow() + 1;
+      const pemasukanData = [
+        new Date(data.tanggalCatat),
+        'Pemasukan',
+        'Piutang', // Or a more specific category
+        'Penerimaan piutang dari ' + data.pihak,
+        parseFloat(cleanJumlah),
+        'Lunas',
+        'Transfer',
+        data.wallet,
+        'piutang',
+        'Otomatis dari pencatatan piutang',
+        Session.getActiveUser().getEmail()
+      ];
+      transaksiSheet.getRange(transaksiRow, 1, 1, pemasukanData.length).setValues([pemasukanData]);
+      const dataRange = transaksiSheet.getRange(2, 1, transaksiSheet.getLastRow() - 1, transaksiSheet.getLastColumn());
+      dataRange.sort({column: 1, ascending: false});
+    }
 
     return { success: true, message: 'Data utang/piutang berhasil ditambahkan!' };
   } catch (error) {

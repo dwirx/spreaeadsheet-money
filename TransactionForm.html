@@ -216,7 +216,10 @@
   </div>
 
   <script>
-    let categories = { pemasukan: [], pengeluaran: [] };
+    let allCategories = {};
+
+    // Set default recording date
+    document.getElementById('tanggal').valueAsDate = new Date();
 
     // Function to format number with dots
     function formatNumber(e) {
@@ -227,54 +230,72 @@
     // Add event listener to amount input
     document.getElementById('jumlah').addEventListener('keyup', formatNumber);
 
-    // Set default date
-    document.getElementById('tanggal').valueAsDate = new Date();
-
     function updateCategories() {
-      const txType = document.querySelector('input[name="jenis"]:checked').value;
-      const kategoriSelect = document.getElementById('kategori');
-      const currentCategoryList = txType === 'Pemasukan' ? categories.pemasukan : categories.pengeluaran;
+      const type = document.querySelector('input[name="jenis"]:checked').value;
+      const categorySelect = document.getElementById('kategori');
+      categorySelect.innerHTML = ''; // Clear existing options
+
+      const categories = (type === 'Pemasukan') ? allCategories.pemasukan : allCategories.pengeluaran;
       
-      kategoriSelect.innerHTML = '<option value="">-- Pilih Kategori --</option>' +
-        currentCategoryList.map(c => `<option value="${c}">${c}</option>`).join('');
+      if (categories && categories.length > 0) {
+        categories.forEach(cat => {
+          const option = document.createElement('option');
+          option.value = cat;
+          option.textContent = cat;
+          categorySelect.appendChild(option);
+        });
+      } else {
+        const option = document.createElement('option');
+        option.value = "";
+        option.textContent = "Tidak ada kategori";
+        categorySelect.appendChild(option);
+      }
     }
 
     document.addEventListener('DOMContentLoaded', function() {
       google.script.run.withSuccessHandler(function(data) {
+        allCategories = data.categories;
         const walletSelect = document.getElementById('wallet');
-        walletSelect.innerHTML = '<option value="">-- Pilih Wallet --</option>' +
-                                 data.wallets.map(w => `<option value="${w}">${w}</option>`).join('');
         
-        categories = data.categories;
-        document.getElementById('radioPengeluaran').checked = true;
+        walletSelect.innerHTML = '';
+        if (data.wallets && data.wallets.length > 0) {
+            data.wallets.forEach(wallet => {
+                const option = document.createElement('option');
+                option.value = wallet;
+                option.textContent = wallet;
+                walletSelect.appendChild(option);
+            });
+        } else {
+            walletSelect.innerHTML = '<option value="">Tidak ada wallet</option>';
+        }
+
+        // Initial population of categories
         updateCategories();
 
+      }).withFailureHandler(function(err) {
+        alert('Gagal memuat data awal: ' + err.message);
       }).getInitialData();
-    });
-
-    document.querySelectorAll('input[name="jenis"]').forEach(radio => {
-      radio.addEventListener('change', updateCategories);
     });
 
     document.getElementById('transactionForm').addEventListener('submit', function(e) {
       e.preventDefault();
 
       const formData = {
-        tanggal: document.getElementById('tanggal').value,
-        jenis: document.querySelector('input[name="jenis"]:checked').value,
-        kategori: document.getElementById('kategori').value,
-        deskripsi: document.getElementById('deskripsi').value,
-        jumlah: document.getElementById('jumlah').value.replace(/\./g, ''), // Remove dots
-        status: document.getElementById('status').value,
-        metode: document.getElementById('metode').value,
-        wallet: document.getElementById('wallet').value,
-        tags: document.getElementById('tags').value,
-        catatan: document.getElementById('catatan').value
+        tanggal: this.elements['tanggal'].value,
+        jenis: this.elements['jenis'].value,
+        kategori: this.elements['kategori'].value,
+        deskripsi: this.elements['deskripsi'].value,
+        jumlah: this.elements['jumlah'].value.replace(/\./g, ''),
+        status: this.elements['status'].value,
+        metode: this.elements['metode'].value,
+        wallet: this.elements['wallet'].value
       };
 
+      // Show loading
       document.getElementById('transactionForm').style.display = 'none';
       document.getElementById('loading').style.display = 'block';
 
+      // Submit to server
       google.script.run
         .withSuccessHandler(function(result) {
           if (result.success) {

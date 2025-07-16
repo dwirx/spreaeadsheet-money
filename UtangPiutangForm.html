@@ -202,6 +202,13 @@
         <textarea id="catatan" name="catatan" rows="2"></textarea>
       </div>
 
+      <div class="form-group" id="wallet-group" style="display: none;">
+        <label for="wallet">Transfer ke Wallet</label>
+        <select id="wallet" name="wallet">
+          <option value="" disabled selected>Pilih Wallet Tujuan...</option>
+        </select>
+      </div>
+
       <div class="button-group">
         <button type="submit" class="btn-primary">💾 Simpan</button>
         <button type="button" class="btn-secondary" onclick="google.script.host.close()">❌ Batal</button>
@@ -226,6 +233,37 @@
     // Add event listener to amount input
     document.getElementById('jumlah').addEventListener('keyup', formatNumber);
 
+    // Show wallet selection when "Piutang" is chosen
+    document.querySelectorAll('input[name="jenis"]').forEach(radio => {
+      radio.addEventListener('change', function() {
+        const walletGroup = document.getElementById('wallet-group');
+        if (this.value === 'Piutang') {
+          walletGroup.style.display = 'block';
+          document.getElementById('wallet').required = true;
+        } else {
+          walletGroup.style.display = 'none';
+          document.getElementById('wallet').required = false;
+        }
+      });
+    });
+
+    // Load wallets into the select dropdown
+    document.addEventListener('DOMContentLoaded', function() {
+        google.script.run.withSuccessHandler(function(wallets) {
+            const walletSelect = document.getElementById('wallet');
+            walletSelect.innerHTML = '<option value="" disabled selected>Pilih Wallet Tujuan...</option>';
+            if (wallets && wallets.length > 0) {
+                wallets.forEach(wallet => {
+                    const option = document.createElement('option');
+                    option.value = wallet;
+                    option.textContent = wallet;
+                    walletSelect.appendChild(option);
+                });
+            }
+        }).getWallets();
+    });
+
+
     document.getElementById('debtForm').addEventListener('submit', function(e) {
       e.preventDefault();
 
@@ -236,7 +274,8 @@
         jumlah: this.elements['jumlah'].value.replace(/\./g, ''), // Remove dots
         tanggalCatat: this.elements['tanggalCatat'].value,
         tanggalJatuhTempo: this.elements['tanggalJatuhTempo'].value,
-        catatan: this.elements['catatan'].value
+        catatan: this.elements['catatan'].value,
+        wallet: this.elements['wallet'].value
       };
 
       // Show loading
